@@ -100,8 +100,8 @@ sudo SSH_PORT=22 \
 | `SSH_PORT` | авто-детект из `ss`/`sshd_config` | порт SSH |
 | `TCP_PORTS` | `443,2087` | сервисные TCP-порты Xray/панели |
 | `UDP_PORTS` | `443,2087` | UDP-порты для QUIC/Hysteria/TUIC |
-| `NODE_PORT` | `2222` | порт агента ноды; открыт только для IP из `WHITELIST` |
-| `WHITELIST` | _обязателен_ | IP/CIDR панели. Пустой список — `protect.sh` завершится с ошибкой |
+| `NODE_PORT` | `2222` | порт агента ноды. После protect открыт только для панели, не для всего интернета |
+| `WHITELIST` | авто | доп. IP/CIDR. IP панели берётся сам: кто уже подключён к `NODE_PORT`, плюс старые allow-правила ufw/iptables |
 | `SAFETY_DELAY` | `300` | сек до авто-сброса правил (если не подтвердить) |
 | `ENABLE_SCANNER_BLOCK` | `1` | обновлять ASN-блоклист при установке |
 | `SCANNER_PREFIX_SOURCE` | `auto` | `auto` — RIPEstat HTTPS, при пустом ответе whois RADB; `ripestat` / `whois` — только один источник |

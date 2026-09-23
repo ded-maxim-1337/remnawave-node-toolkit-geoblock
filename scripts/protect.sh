@@ -47,7 +47,7 @@ if [[ -t 0 && -z "${REMNAWAVE_NONINTERACTIVE:-}" ]]; then
     read -rp "TCP порты Remnawave (через ,) [$TCP_PORTS]: "                 _v && TCP_PORTS="${_v:-$TCP_PORTS}"
     read -rp "UDP порты Remnawave (через ,) [$UDP_PORTS]: "                 _v && UDP_PORTS="${_v:-$UDP_PORTS}"
     read -rp "Порт node-agent              [$NODE_PORT]: "                  _v && NODE_PORT="${_v:-$NODE_PORT}"
-    read -rp "Whitelist IP/CIDR панели (через ,) [обязательно]: "           _v && WHITELIST="${_v:-$WHITELIST}"
+    read -rp "Доп. whitelist IP/CIDR (панель с порта ${NODE_PORT} подставится сама) [пусто]: " _v && WHITELIST="${_v:-$WHITELIST}"
     echo
     echo "  Геоблок: CN IN BD VN ID PH NG BR EG PK TH MM KH LA ET UZ TN VE EC KE TZ UA"
     echo "  (страны-источники атак, префиксы с ipdeny.com)"
@@ -91,12 +91,58 @@ validate_single_port "$NODE_PORT" NODE_PORT || exit 1
 validate_port_list   "$TCP_PORTS" TCP_PORTS || exit 1
 validate_port_list   "$UDP_PORTS" UDP_PORTS || exit 1
 validate_whitelist   "$WHITELIST"           || exit 1
+
+# Панель Remnawave уже ходит на NODE_PORT, если ноду поставили раньше тулкита.
+# Берём её IP из живых сессий и из уже существующих allow-правил, не из интернета.
+detect_panel_ips() {
+    local port="$1"
+    ss -Hnt sport = ":${port}" 2>/dev/null | awk '
+        {
+            peer = $NF
+            sub(/%[^:]*/, "", peer)
+            if (peer ~ /^\[/) next
+            sub(/:[0-9]+$/, "", peer)
+            if (peer ~ /^([0-9]{1,3}\.){3}[0-9]{1,3}$/ && peer != "127.0.0.1" && peer != "0.0.0.0")
+                print peer
+        }
+    '
+    if command -v ufw >/dev/null 2>&1; then
+        ufw status 2>/dev/null | awk -v port="$port" '
+            $1 == port || $1 == port "/tcp" {
+                src = $3
+                if (src ~ /^([0-9]{1,3}\.){3}[0-9]{1,3}(\/[0-9]{1,2})?$/) print src
+            }
+        '
+    fi
+    iptables -S 2>/dev/null | awk -v port="$port" '
+        {
+            has = 0
+            src = ""
+            for (i = 1; i <= NF; i++) {
+                if ($i == "--dport" && $(i + 1) == port) has = 1
+                if ($i == "-s") src = $(i + 1)
+            }
+            if (has && src ~ /^([0-9]{1,3}\.){3}[0-9]{1,3}(\/[0-9]{1,2})?$/ && src !~ /^0\.0\.0\.0/)
+                print src
+        }
+    '
+}
+
+merge_ip_list() {
+    printf '%s\n' "$@" | tr ', ' '\n' | awk 'NF && !seen[$0]++ { printf "%s%s", sep, $0; sep="," }'
+    printf '\n'
+}
+
+DETECTED="$(detect_panel_ips "$NODE_PORT" | awk 'NF && !seen[$0]++ { printf "%s%s", sep, $0; sep="," }')"
+WHITELIST="$(merge_ip_list "$WHITELIST" "$DETECTED")"
+validate_whitelist "$WHITELIST" || exit 1
 if [[ -z "$WHITELIST" ]]; then
-    err "WHITELIST пуст. Порт node-agent ${NODE_PORT} у Remnawave открыт только для IP панели."
-    err "Без этого protect либо отрежет панель от ноды, либо (старое правило) откроет порт всем."
-    err "Пример: WHITELIST=1.2.3.4"
+    err "Не вижу IP панели на порту ${NODE_PORT}."
+    err "Сначала подключи ноду в Remnawave (панель сама открывает ${NODE_PORT}), затем снова запусти protect."
+    err "Либо укажи адрес явно: WHITELIST=1.2.3.4"
     exit 1
 fi
+info "Порт node-agent ${NODE_PORT} будет открыт только для: ${WHITELIST}"
 
 # ─── Зависимости ─────────────────────────────────────────────────────────────
 title "Установка зависимостей"
