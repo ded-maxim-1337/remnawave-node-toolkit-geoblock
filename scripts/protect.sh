@@ -47,7 +47,7 @@ if [[ -t 0 && -z "${REMNAWAVE_NONINTERACTIVE:-}" ]]; then
     read -rp "TCP порты Remnawave (через ,) [$TCP_PORTS]: "                 _v && TCP_PORTS="${_v:-$TCP_PORTS}"
     read -rp "UDP порты Remnawave (через ,) [$UDP_PORTS]: "                 _v && UDP_PORTS="${_v:-$UDP_PORTS}"
     read -rp "Порт node-agent              [$NODE_PORT]: "                  _v && NODE_PORT="${_v:-$NODE_PORT}"
-    read -rp "Whitelist IP/CIDR панели,моих IP (через ,) [пусто]: "         _v && WHITELIST="${_v:-$WHITELIST}"
+    read -rp "Whitelist IP/CIDR панели (через ,) [обязательно]: "           _v && WHITELIST="${_v:-$WHITELIST}"
     echo
     echo "  Геоблок: CN IN BD VN ID PH NG BR EG PK TH MM KH LA ET UZ TN VE EC KE TZ UA"
     echo "  (страны-источники атак, префиксы с ipdeny.com)"
@@ -91,6 +91,12 @@ validate_single_port "$NODE_PORT" NODE_PORT || exit 1
 validate_port_list   "$TCP_PORTS" TCP_PORTS || exit 1
 validate_port_list   "$UDP_PORTS" UDP_PORTS || exit 1
 validate_whitelist   "$WHITELIST"           || exit 1
+if [[ -z "$WHITELIST" ]]; then
+    err "WHITELIST пуст. Порт node-agent ${NODE_PORT} у Remnawave открыт только для IP панели."
+    err "Без этого protect либо отрежет панель от ноды, либо (старое правило) откроет порт всем."
+    err "Пример: WHITELIST=1.2.3.4"
+    exit 1
+fi
 
 # ─── Зависимости ─────────────────────────────────────────────────────────────
 title "Установка зависимостей"
@@ -246,9 +252,8 @@ $(for p in $(echo "$UDP_PORTS" | tr ',' ' '); do
     echo "        udp dport ${p} limit rate 1000/second burst 2000 packets accept"
 done)
 
-        # Порт node-agent (общается только с панелью — рассчитываем на whitelist)
+        # Порт node-agent — только IP из WHITELIST (панель). В интернет не открывать.
         tcp dport ${NODE_PORT} ip saddr @whitelist_v4 accept
-        tcp dport ${NODE_PORT} ct state new limit rate 30/second burst 60 packets accept
 
         # Всё остальное — тихо drop (не reject), чтобы не светить наличие сервиса
         # А SYN на закрытые порты = port-scan → автобан

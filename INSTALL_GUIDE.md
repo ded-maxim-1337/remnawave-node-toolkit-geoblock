@@ -164,8 +164,8 @@ sudo SSH_PORT=22 \
 
 - `SSH_PORT` — порт SSH (если 0, авто-детект)
 - `TCP_PORTS` / `UDP_PORTS` — сервисные порты
-- `NODE_PORT` — порт node-agent (2222 по умолч.)
-- `WHITELIST` — IP/CIDR через запятую
+- `NODE_PORT` — порт node-agent (2222 по умолч.), только для IP из `WHITELIST`
+- `WHITELIST` — IP/CIDR панели через запятую, обязателен
 - `SAFETY_DELAY` — секунд до авто-сброса (300 по умолч.)
 - `ENABLE_SCANNER_BLOCK=0` — выключить ASN-блок
 - `ENABLE_SPAMHAUS=0` — выключить Spamhaus
